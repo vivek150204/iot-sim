@@ -1,7 +1,7 @@
 import { Stage, Layer, Image, Line } from "react-konva";
 //@ts-ignore
 import { useDrop } from "react-dnd";
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const componentImages: Record<string, string> = {
   led: "/assets/led.png",
@@ -18,6 +18,7 @@ interface Element {
   type: string;
   x: number;
   y: number;
+  image?: HTMLImageElement;
 }
 
 interface Wire {
@@ -30,7 +31,35 @@ const Canvas: React.FC = () => {
   const [elements, setElements] = useState<Element[]>([]);
   const [wires, setWires] = useState<Wire[]>([]);
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
-  const imageRefs = useRef<{ [key: number]: HTMLImageElement | null }>({});
+  
+  // Load images and store them in the state
+  useEffect(() => {
+    const loadImages = async () => {
+      const imageMap: Record<string, HTMLImageElement> = {};
+      await Promise.all(
+        Object.keys(componentImages).map((type) => {
+          return new Promise<void>((resolve) => {
+            const img = new window.Image();
+            img.src = componentImages[type];
+            img.onload = () => {
+              imageMap[type] = img;
+              resolve();
+            };
+          });
+        })
+      );
+      
+      // Set elements with loaded images
+      setElements((prev) =>
+        prev.map((el) => ({
+          ...el,
+          image: imageMap[el.type],
+        }))
+      );
+    };
+
+    loadImages();
+  }, []);
 
   const [, drop] = useDrop(() => ({
     accept: "COMPONENT",
@@ -44,13 +73,14 @@ const Canvas: React.FC = () => {
             type: item.type,
             x: offset.x - 150,
             y: offset.y,
+            image: null, // Initially null, will be updated in useEffect
           },
         ]);
       }
     },
   }));
 
-  // Function to handle component click
+  // Handle component selection and wire creation
   const handleComponentClick = (element: Element) => {
     if (!selectedElement) {
       setSelectedElement(element);
@@ -69,7 +99,7 @@ const Canvas: React.FC = () => {
     }
   };
 
-  // Function to update node position
+  // Update position on drag
   const handleDragMove = (e: any, id: number) => {
     const { x, y } = e.target.position();
     setElements((prev) =>
@@ -77,7 +107,7 @@ const Canvas: React.FC = () => {
     );
   };
 
-  // Function to get dynamic wire points
+  // Get wire connection points
   const getWirePoints = (wire: Wire) => {
     const startNode = elements.find((el) => el.id === wire.startId);
     const endNode = elements.find((el) => el.id === wire.endId);
@@ -116,29 +146,23 @@ const Canvas: React.FC = () => {
           ))}
 
           {/* Render components */}
-          {elements.map((el) => {
-            const img = new window.Image();
-            img.src = componentImages[el.type];
-            img.onload = () => (imageRefs.current[el.id] = img);
-
-            return (
-              <Image
-                key={el.id}
-                x={el.x}
-                y={el.y}
-                width={100}
-                height={100}
-                image={imageRefs.current[el.id] || img}
-                draggable
-                onDragMove={(e) => handleDragMove(e, el.id)}
-                onClick={() => handleComponentClick(el)}
-                stroke={selectedElement?.id === el.id ? "red" : ""}
-                strokeWidth={selectedElement?.id === el.id ? 5 : 0}
-                shadowColor={selectedElement?.id === el.id ? "red" : ""}
-                shadowBlur={selectedElement?.id === el.id ? 10 : 0}
-              />
-            );
-          })}
+          {elements.map((el) => (
+            <Image
+              key={el.id}
+              x={el.x}
+              y={el.y}
+              width={100}
+              height={100}
+              image={el.image}
+              draggable
+              onDragMove={(e) => handleDragMove(e, el.id)}
+              onClick={() => handleComponentClick(el)}
+              stroke={selectedElement?.id === el.id ? "red" : ""}
+              strokeWidth={selectedElement?.id === el.id ? 5 : 0}
+              shadowColor={selectedElement?.id === el.id ? "red" : ""}
+              shadowBlur={selectedElement?.id === el.id ? 10 : 0}
+            />
+          ))}
         </Layer>
       </Stage>
     </div>
